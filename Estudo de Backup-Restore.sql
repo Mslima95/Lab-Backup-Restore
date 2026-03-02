@@ -121,11 +121,27 @@ GO
 
 /****************************************************************************************
  LAB 02 – PAGE RESTORE (CORRUPÇÃO DE PÁGINA)
+ Sequência:
+   1. Backup Full
+   2. Backup Log
+   3. Corrupção da página
+   4. Identificação da corrupção
+   5. Page Restore
+   6. Restore dos Logs
+   7. Backup Log pós-restore
 ****************************************************************************************/
 
+
+/****************************************************************************************
+ Localizando páginas e IDs
+****************************************************************************************/
 DBCC IND ('Teste_Desastre', 'PageRestoreTest', -1);
 GO
 
+
+/****************************************************************************************
+ Alterando estado do banco
+****************************************************************************************/
 ALTER DATABASE Teste_Desastre
 SET MULTI_USER WITH ROLLBACK IMMEDIATE;
 GO
@@ -134,6 +150,11 @@ ALTER DATABASE Teste_Desastre
 SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
 GO
 
+
+/****************************************************************************************
+ Corrompendo página manualmente (LAB controlado)
+****************************************************************************************/
+ 
 USE master;
 GO
 
@@ -153,10 +174,20 @@ ALTER DATABASE Teste_Desastre
 SET MULTI_USER;
 GO
 
+
+/****************************************************************************************
+ Validação de corrupção
+****************************************************************************************/
+ 
 DBCC CHECKDB ('Teste_Desastre')
 WITH NO_INFOMSGS, ALL_ERRORMSGS;
 GO
 
+
+/****************************************************************************************
+ Identificando objeto afetado pela página corrompida
+****************************************************************************************/
+ 
 SELECT  
     DB_NAME(susp.database_id)                         AS DatabaseName,
     OBJECT_SCHEMA_NAME(ind.object_id, ind.database_id) AS ObjectSchemaName,
@@ -171,17 +202,33 @@ WHERE ind.allocated_page_file_id = susp.file_id
   AND ind.allocated_page_page_id = susp.page_id;
 GO
 
+
+/****************************************************************************************
+ Comprovando páginas suspeitas
+****************************************************************************************/ 
+
 SELECT *
 FROM msdb.dbo.suspect_pages
 ORDER BY last_update_date DESC;
 GO
 
+
+ 
+/****************************************************************************************
+ PAGE RESTORE
+****************************************************************************************/
+ 
 RESTORE DATABASE Teste_Desastre
 PAGE = '1:603'
 FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_FULL.bak'
 WITH NORECOVERY;
 GO
 
+
+/****************************************************************************************
+ Restore dos Logs após Page Restore
+****************************************************************************************/
+ 
 RESTORE LOG Teste_Desastre
 FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_LOG_20260204_201004.trn'
 WITH NORECOVERY;
@@ -202,11 +249,19 @@ FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_LOG_20260204_202049.trn'
 WITH RECOVERY;
 GO
 
+
+/****************************************************************************************
+ Restore do Backup de Log pós Page Restore
+****************************************************************************************/
 RESTORE LOG Teste_Desastre
 FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_LOG_20260204_202404.trn'
 WITH RECOVERY;
 GO
 
+
+ /****************************************************************************************
+ Validações finais
+****************************************************************************************/
 DBCC CHECKDB('Teste_Desastre');
 GO
 
