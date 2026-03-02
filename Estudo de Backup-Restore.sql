@@ -1,26 +1,59 @@
 /****************************************************************************************
- Projeto : PortfÛlio DBA ñ Backup e Restore SQL Server
+ Projeto : Portf√≥lio DBA ‚Äì Backup e Restore SQL Server
  Autor   : [KMatheus Sobreira Lima]
  Banco   : Teste_Desastre
- Objetivo: DemonstraÁ„o de cen·rios de recuperaÁ„o de desastres no SQL Server
-           - Erro humano / bug de aplicaÁ„o
+ Objetivo: Demonstra√ß√£o de cen√°rios de recupera√ß√£o de desastres no SQL Server
+           - Backup Full e Log automatizados
+           - Erro humano / bug de aplica√ß√£o
            - Restore Full + Log
-           - Page Restore (corrupÁ„o de p·gina)
- Vers„o  : SQL Server 2022 Developer Edition (16.x)
+           - Page Restore (corrup√ß√£o de p√°gina)
+ Vers√£o  : SQL Server 2022 Developer Edition (16.x)
 ****************************************************************************************/
 
 
 /****************************************************************************************
- LAB 01 ñ ERRO HUMANO / BUG DE APLICA«√O
- Cen·rio:
-   - AtualizaÁ„o indevida em tabela crÌtica
-   - RecuperaÁ„o via Backup Full + sequÍncia de Backups de Log
+ JOBS DE BACKUP AUTOMATIZADOS
+ Objetivo: Demonstrar backup Full e Log via SQL Server Agent
+****************************************************************************************/
+
+-- ================================
+-- Job: Backup Full - Job_BackupFull_Desastre
+-- Frequ√™ncia: Di√°rio (ex: 02:00)
+-- Objetivo: Backup completo da base Teste_Desastre
+-- ================================
+
+BACKUP DATABASE Teste_Desastre
+TO DISK = 'C:\Teste_Desastre_Bckp\Teste_FULL.bak'
+WITH COMPRESSION, INIT, STATS = 10;
+GO
+
+-- ================================
+-- Job: Backup Log - Job_BackupLog_Desastre
+-- Frequ√™ncia: A cada 5 minutos
+-- Objetivo: Backup do log de transa√ß√µes da base Teste_Desastre
+-- ================================
+
+DECLARE @BackupLogPath NVARCHAR(255);
+
+SET @BackupLogPath = 'C:\Teste_Desastre_Bckp\Teste_LOG_' 
+    + CONVERT(VARCHAR(8), GETDATE(), 112)  -- YYYYMMDD
+    + '_' 
+    + REPLACE(CONVERT(VARCHAR(8), GETDATE(), 108), ':', '')  -- HHMMSS
+    + '.trn';
+
+BACKUP LOG Teste_Desastre
+TO DISK = @BackupLogPath
+WITH COMPRESSION, STATS = 10;
+GO
+
+/****************************************************************************************
+ LAB 01 ‚Äì ERRO HUMANO / BUG DE APLICA√á√ÉO
 ****************************************************************************************/
 
 USE Teste_Desastre;
 GO
 
--- SimulaÁ„o de erro humano / bug de aplicaÁ„o
+-- Simula√ß√£o de erro humano / bug de aplica√ß√£o
 UPDATE Funcionario
 SET Salario = 1;
 GO
@@ -38,7 +71,7 @@ GO
 
 
 /****************************************************************************************
- Restore FULL (Base permanece em NORECOVERY para aplicaÁ„o dos logs)
+ Restore FULL (Base permanece em NORECOVERY para aplica√ß√£o dos logs)
 ****************************************************************************************/
 RESTORE DATABASE Teste_Desastre
 FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_FULL.bak'
@@ -51,9 +84,6 @@ GO
 
 /****************************************************************************************
  Restore LOG
- ObservaÁıes:
-   - Sempre iniciar com um Backup FULL
-   - Respeitar rigorosamente a sequÍncia dos Backups de Log
 ****************************************************************************************/
 RESTORE LOG Teste_Desastre
 FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_LOG_20260204_201004.trn'
@@ -79,7 +109,7 @@ SET MULTI_USER WITH ROLLBACK IMMEDIATE;
 GO
 
 
--- ValidaÁ„o dos dados apÛs restore
+-- Valida√ß√£o dos dados ap√≥s restore
 USE Teste_Desastre;
 GO
 
@@ -90,28 +120,12 @@ GO
 
 
 /****************************************************************************************
- LAB 02 ñ PAGE RESTORE (CORRUP«√O DE P¡GINA)
- SequÍncia:
-   1. Backup Full
-   2. Backup Log
-   3. CorrupÁ„o da p·gina
-   4. IdentificaÁ„o da corrupÁ„o
-   5. Page Restore
-   6. Restore dos Logs
-   7. Backup Log pÛs-restore
+ LAB 02 ‚Äì PAGE RESTORE (CORRUP√á√ÉO DE P√ÅGINA)
 ****************************************************************************************/
 
-
-/****************************************************************************************
- Localizando p·ginas e IDs
-****************************************************************************************/
 DBCC IND ('Teste_Desastre', 'PageRestoreTest', -1);
 GO
 
-
-/****************************************************************************************
- Alterando estado do banco
-****************************************************************************************/
 ALTER DATABASE Teste_Desastre
 SET MULTI_USER WITH ROLLBACK IMMEDIATE;
 GO
@@ -120,10 +134,6 @@ ALTER DATABASE Teste_Desastre
 SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
 GO
 
-
-/****************************************************************************************
- Corrompendo p·gina manualmente (LAB controlado)
-****************************************************************************************/
 USE master;
 GO
 
@@ -139,23 +149,14 @@ DBCC WRITEPAGE
 );
 GO
 
-
 ALTER DATABASE Teste_Desastre
 SET MULTI_USER;
 GO
 
-
-/****************************************************************************************
- ValidaÁ„o de corrupÁ„o
-****************************************************************************************/
 DBCC CHECKDB ('Teste_Desastre')
 WITH NO_INFOMSGS, ALL_ERRORMSGS;
 GO
 
-
-/****************************************************************************************
- Identificando objeto afetado pela p·gina corrompida
-****************************************************************************************/
 SELECT  
     DB_NAME(susp.database_id)                         AS DatabaseName,
     OBJECT_SCHEMA_NAME(ind.object_id, ind.database_id) AS ObjectSchemaName,
@@ -170,29 +171,17 @@ WHERE ind.allocated_page_file_id = susp.file_id
   AND ind.allocated_page_page_id = susp.page_id;
 GO
 
-
-/****************************************************************************************
- Comprovando p·ginas suspeitas
-****************************************************************************************/
 SELECT *
 FROM msdb.dbo.suspect_pages
 ORDER BY last_update_date DESC;
 GO
 
-
-/****************************************************************************************
- PAGE RESTORE
-****************************************************************************************/
 RESTORE DATABASE Teste_Desastre
 PAGE = '1:603'
 FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_FULL.bak'
 WITH NORECOVERY;
 GO
 
-
-/****************************************************************************************
- Restore dos Logs apÛs Page Restore
-****************************************************************************************/
 RESTORE LOG Teste_Desastre
 FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_LOG_20260204_201004.trn'
 WITH NORECOVERY;
@@ -213,19 +202,11 @@ FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_LOG_20260204_202049.trn'
 WITH RECOVERY;
 GO
 
-
-/****************************************************************************************
- Restore do Backup de Log pÛs Page Restore
-****************************************************************************************/
 RESTORE LOG Teste_Desastre
 FROM DISK = 'C:\Teste_Desastre_Bckp\Teste_LOG_20260204_202404.trn'
 WITH RECOVERY;
 GO
 
-
-/****************************************************************************************
- ValidaÁıes finais
-****************************************************************************************/
 DBCC CHECKDB('Teste_Desastre');
 GO
 
@@ -233,7 +214,6 @@ SELECT name, recovery_model_desc
 FROM sys.databases
 WHERE name = 'Teste_Desastre';
 GO
-
 
 USE Teste_Desastre;
 GO
