@@ -29,7 +29,7 @@ Isso garante que qualquer teste ou simulação de desastre possa ser recuperado 
 - Restore sequencial de Backups de Log
 - Validação dos dados
 
-📄 Script: `labs/Estudo de Backup-Restore.sql`
+📄 Script: `Lab-Backup-Restore/Estudo de Backup-Restore.sql`
 
 ---
 
@@ -43,7 +43,7 @@ Isso garante que qualquer teste ou simulação de desastre possa ser recuperado 
 - Restore de Logs
 - Backup de Log pós-recovery
 
-📄 Script: `Lab-Backup-Restore/02_page_restore.sql`
+📄 Script: `Lab-Backup-Restore/Estudo de Backup-Restore.sql`
 
 ## 🎯 Objetivo do Projeto
 Demonstrar domínio de estratégias de backup, restore e recuperação de desastres
